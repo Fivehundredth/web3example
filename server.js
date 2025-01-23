@@ -82,3 +82,97 @@ process.on("uncaughtException", (err) => {
   console.log(`Error: ${err.message}`);
   process.exit(1);
 });
+
+// API endpoints
+app.get('/api/usdt/total-supply', async (req, res) => {
+    try {
+        const totalSupply = await USDT_CONTRACT.methods.totalSupply().call();
+        const formattedSupply = web3.utils.fromWei(totalSupply, 'mwei');
+        res.json({
+            success: true,
+            totalSupply: formattedSupply,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+app.get('/api/usdt/balance/:address', async (req, res) => {
+    try {
+        const { address } = req.params;
+        
+        // check address validity
+        if (!web3.utils.isAddress(address)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Wrong address format'
+            });
+        }
+
+        const balance = await USDT_CONTRACT.methods.balanceOf(address).call();
+        const formattedBalance = web3.utils.fromWei(balance, 'mwei');
+        
+        res.json({
+            success: true,
+            address: address,
+            balance: formattedBalance,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// add endpoint for getting multiple balances at once
+app.get('/api/usdt/multi-balance', async (req, res) => {
+    try {
+        const { addresses } = req.query;
+        
+        if (!addresses) {
+            return res.status(400).json({
+                success: false,
+                error: 'Addresses are not specified'
+            });
+        }
+
+        const addressList = addresses.split(',');
+        
+        // check address validity
+        const invalidAddresses = addressList.filter(addr => !web3.utils.isAddress(addr));
+        if (invalidAddresses.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Found invalid addresses',
+                invalidAddresses
+            });
+        }
+
+        const balances = await Promise.all(
+            addressList.map(async (address) => {
+                const balance = await USDT_CONTRACT.methods.balanceOf(address).call();
+                return {
+                    address,
+                    balance: web3.utils.fromWei(balance, 'mwei')
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            balances,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
